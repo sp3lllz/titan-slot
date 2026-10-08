@@ -1,10 +1,10 @@
 package dev.titanslot
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings as AndroidSettings
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
@@ -12,7 +12,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityOptionsCompat
-import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -22,8 +21,12 @@ import dev.titanslot.app.Host
 import dev.titanslot.app.Sfx
 import dev.titanslot.app.SystemStatus
 import dev.titanslot.core.Core
+import dev.titanslot.core.Delivery
 import dev.titanslot.data.Cart
+import dev.titanslot.data.Importer
+import dev.titanslot.data.Paths
 import dev.titanslot.data.Settings
+import dev.titanslot.data.Storage
 import dev.titanslot.input.KeyMap
 import dev.titanslot.input.KeyRouter
 import dev.titanslot.ui.TitanSlotApp
@@ -44,6 +47,18 @@ class MainActivity : ComponentActivity(), Host {
         onPicked = null
     }
 
+    private var onFolder: ((Uri) -> Unit)? = null
+    private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let { onFolder?.invoke(it) }
+        onFolder = null
+    }
+
+    private var onFiles: ((List<Uri>) -> Unit)? = null
+    private val filesPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) onFiles?.invoke(uris)
+        onFiles = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Some launchers start a second shelf on top of a running game instead of bringing
@@ -62,6 +77,9 @@ class MainActivity : ComponentActivity(), Host {
             sfx = sfx,
             scope = lifecycleScope,
             cacheDir = cacheDir,
+            storage = Storage(this),
+            importer = Importer(contentResolver),
+            cores = Delivery.installer(this),
         )
         onBackPressedDispatcher.addCallback(this) { app.onBack() }
         setContent { TitanSlotApp(app) }
@@ -111,16 +129,9 @@ class MainActivity : ComponentActivity(), Host {
 
     // ---- Host ----------------------------------------------------------------------------
 
-    override fun requestStorage() {
-        val intent = Intent(AndroidSettings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, "package:$packageName".toUri())
-        runCatching { startActivity(intent) }.onFailure {
-            startActivity(Intent(AndroidSettings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-        }
-    }
-
-    override fun launchGame(cart: Cart, core: Core, fresh: Boolean) {
+    override fun launchGame(cart: Cart, core: Core, fresh: Boolean, paths: Paths) {
         game.launch(
-            GameActivity.intent(this, cart, core, fresh),
+            GameActivity.intent(this, cart, core, fresh, paths),
             ActivityOptionsCompat.makeCustomAnimation(this, android.R.anim.fade_in, 0),
         )
     }
@@ -132,6 +143,29 @@ class MainActivity : ComponentActivity(), Host {
     override fun pickImage(onPicked: (Uri) -> Unit) {
         this.onPicked = onPicked
         picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
+    override fun pickFolder(onPicked: (Uri) -> Unit): Boolean {
+        onFolder = onPicked
+        return try {
+            folderPicker.launch(null)
+            true
+        } catch (e: ActivityNotFoundException) {
+            onFolder = null
+            false
+        }
+    }
+
+    override fun pickFiles(onPicked: (List<Uri>) -> Unit): Boolean {
+        onFiles = onPicked
+        return try {
+            // ROMs and saves have no registered type, so offer everything.
+            filesPicker.launch(arrayOf("*/*"))
+            true
+        } catch (e: ActivityNotFoundException) {
+            onFiles = null
+            false
+        }
     }
 
     override fun openStream(uri: Uri): InputStream? = contentResolver.openInputStream(uri)

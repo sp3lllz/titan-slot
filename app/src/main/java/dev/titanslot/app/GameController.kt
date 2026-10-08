@@ -26,7 +26,8 @@ interface GameHost {
 /**
  * Everything that happens with a cart in the slot, after slot's in-game controls:
  * tap MENU for the pause menu, hold it to eject, double-tap it for the save state switcher,
- * SELECT + R / L to save / load, hold or double-tap fast-forward, hold rewind.
+ * SELECT + R / L to save / load, hold or double-tap fast-forward, hold rewind. On top of
+ * those, one quick save key: tap it to save a state, hold it to load the newest.
  */
 class GameController(
     private val host: GameHost,
@@ -58,6 +59,9 @@ class GameController(
     private var selectCombo = false
     private val swallowed = mutableSetOf<Button>()
     private var leaving = false
+    private var quickJob: Job? = null
+    private var quickDown = false
+    private var quickHeld = false
 
     fun toast(text: String) {
         toast = Toast(text)
@@ -65,6 +69,15 @@ class GameController(
 
     fun onPause() {
         session.releaseAll()
+        quickJob?.cancel()
+        quickDown = false
+    }
+
+    /** The first frame is up. The first few games show where the menu and quick save are. */
+    fun onReady() {
+        if (settings.hintsLeft <= 0) return
+        settings.hintsLeft = settings.hintsLeft - 1
+        toast("${keyMap.hint(Button.MENU)} Menu · ${keyMap.hint(Button.QUICK_SAVE)} Quick Save")
     }
 
     fun onKey(b: Button, down: Boolean) {
@@ -83,6 +96,7 @@ class GameController(
             Button.MENU -> menuKey(down)
             Button.FAST_FORWARD -> fastForwardKey(down)
             Button.REWIND -> s.holdRewind(down)
+            Button.QUICK_SAVE -> quickKey(down)
             Button.SELECT -> selectKey(down)
             else -> {
                 if (!down && swallowed.remove(b)) return
@@ -178,6 +192,26 @@ class GameController(
         }
     }
 
+    /** Tap to save a state; hold to load the newest one (Undo Load in the menu puts it back). */
+    private fun quickKey(down: Boolean) {
+        if (down) {
+            quickDown = true
+            quickHeld = false
+            quickJob?.cancel()
+            quickJob = scope.launch {
+                delay(QUICK_HOLD_MS)
+                quickHeld = true
+                quickLoad()
+            }
+            return
+        }
+        // A release whose press went to a menu, or that already loaded, does nothing.
+        if (!quickDown) return
+        quickDown = false
+        quickJob?.cancel()
+        if (!quickHeld) quickSave()
+    }
+
     private fun fastForwardKey(down: Boolean) {
         val now = SystemClock.uptimeMillis()
         if (down) {
@@ -264,11 +298,17 @@ class GameController(
         session.pause(false)
     }
 
+    /** The pause menu's rows; Undo Load only once there is a load to undo. */
+    fun pauseRows(): List<PauseRow> = PauseRow.entries.filter { it != PauseRow.UNDO_LOAD || session.canUndoLoad }
+
     private fun overlayKey(b: Button) {
         when (overlay) {
             GameOverlay.PAUSE -> when (b) {
-                Button.UP -> pauseRow = PauseRow.entries[(pauseRow.ordinal - 1).mod(PauseRow.entries.size)]
-                Button.DOWN -> pauseRow = PauseRow.entries[(pauseRow.ordinal + 1).mod(PauseRow.entries.size)]
+                Button.UP, Button.DOWN -> {
+                    val rows = pauseRows()
+                    val at = rows.indexOf(pauseRow).coerceAtLeast(0)
+                    pauseRow = rows[(at + if (b == Button.UP) -1 else 1).mod(rows.size)]
+                }
                 Button.A -> activatePause(pauseRow)
                 Button.B -> closeOverlay()
                 else -> Unit
@@ -296,6 +336,10 @@ class GameController(
             PauseRow.LOAD_STATE -> {
                 closeOverlay()
                 quickLoad()
+            }
+            PauseRow.UNDO_LOAD -> {
+                closeOverlay()
+                scope.launch { toast(if (session.undoLoad()) "Load Undone" else "Could Not Undo") }
             }
             PauseRow.STATES -> {
                 overlay = null
@@ -334,5 +378,6 @@ class GameController(
         const val MENU_HOLD_MS = 650L
         const val DOUBLE_TAP_MS = 280L
         const val TAP_MS = 70L
+        const val QUICK_HOLD_MS = 600L
     }
 }

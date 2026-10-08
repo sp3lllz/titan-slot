@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12 and later. Backed up: battery saves, cart settings, preferences and key bindings.
+    Not: games (yours to import again), save states (too large for cloud backup), and the
+    "device" preferences (which card the library is on, whether setup ran), which mean nothing
+    on another phone. "external" is the phone's app folder, Android/data/dev.titanslot/files.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="settings.xml" />
+        <include domain="sharedpref" path="keymap.xml" />
+        <include domain="external" path="Saves/" />
+        <include domain="external" path="Config/" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="settings.xml" />
+        <include domain="sharedpref" path="keymap.xml" />
+        <include domain="external" path="Saves/" />
+        <include domain="external" path="States/" />
+        <include domain="external" path="Config/" />
+    </device-transfer>
+</data-extraction-rules>

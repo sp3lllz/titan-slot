@@ -18,7 +18,7 @@ object RomFile {
             val stamp = File(dir, out.name + ".src")
             val source = "${cart.rom.path}|${cart.rom.length()}|${cart.rom.lastModified()}"
             if (out.isFile && stamp.isFile && stamp.readText() == source) return out
-            // Keep the cache to the ROM being played; DS images run to hundreds of megabytes.
+            // Keep the cache to the ROM being played.
             dir.listFiles()?.forEach { it.delete() }
             zip.getInputStream(entry).use { input -> out.outputStream().use { input.copyTo(it) } }
             stamp.writeText(source)

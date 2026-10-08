@@ -52,17 +52,19 @@ class GameActivity : ComponentActivity(), GameHost {
 
         val platform = intent.getStringExtra(EXTRA_PLATFORM)?.let { runCatching { Platform.valueOf(it) }.getOrNull() }
         val rom = intent.getStringExtra(EXTRA_ROM)?.let(::File)
-        if (platform == null || rom == null) {
+        val library = intent.getStringExtra(EXTRA_LIBRARY)?.let(::File)
+        val data = intent.getStringExtra(EXTRA_DATA)?.let(::File)
+        if (platform == null || rom == null || library == null || data == null) {
             finish()
             return
         }
         val core = Core.byId(intent.getStringExtra(EXTRA_CORE))?.takeIf { it in platform.cores } ?: platform.defaultCore
         val settings = Settings(this)
-        val paths = Paths.default()
+        val paths = Paths(library, data)
         keyMap = KeyMap(this)
         status = SystemStatus(this)
         val session = GameSession(
-            cart = Library.cartFor(platform, rom),
+            cart = Library.cartFor(platform, rom, paths),
             core = core,
             fresh = intent.getBooleanExtra(EXTRA_FRESH, false),
             parent = lifecycle,
@@ -145,12 +147,16 @@ class GameActivity : ComponentActivity(), GameHost {
         private const val EXTRA_ROM = "rom"
         private const val EXTRA_CORE = "core"
         private const val EXTRA_FRESH = "fresh"
+        private const val EXTRA_LIBRARY = "library"
+        private const val EXTRA_DATA = "data"
 
-        fun intent(context: Context, cart: Cart, core: Core, fresh: Boolean): Intent =
+        fun intent(context: Context, cart: Cart, core: Core, fresh: Boolean, paths: Paths): Intent =
             Intent(context, GameActivity::class.java)
                 .putExtra(EXTRA_PLATFORM, cart.platform.name)
                 .putExtra(EXTRA_ROM, cart.rom.path)
                 .putExtra(EXTRA_CORE, core.id)
                 .putExtra(EXTRA_FRESH, fresh)
+                .putExtra(EXTRA_LIBRARY, paths.library.path)
+                .putExtra(EXTRA_DATA, paths.data.path)
     }
 }

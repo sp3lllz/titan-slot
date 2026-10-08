@@ -14,9 +14,6 @@ object CoreOptions {
         val map = when (core) {
             Core.GAMBATTE -> gambatte(settings)
             Core.MGBA -> mgba(platform, settings)
-            Core.MELONDS -> melonds()
-            Core.FCEUMM -> fceumm()
-            Core.SNES9X -> snes9x()
         }
         return map.map { (k, v) -> Variable(k, v) }.toTypedArray()
     }
@@ -48,28 +45,4 @@ object CoreOptions {
             put("mgba_gb_colors", settings.gbPalette.mgba)
         }
     }
-
-    private fun melonds(): Map<String, String> = mapOf(
-        "melonds_console_mode" to "DS",
-        "melonds_boot_directly" to "enabled",
-        "melonds_screen_layout" to "Top/Bottom",
-        "melonds_screen_gap" to "0",
-        "melonds_touch_mode" to "Touch",
-        "melonds_threaded_renderer" to "enabled",
-        "melonds_opengl_renderer" to "disabled",
-        "melonds_jit_enable" to "enabled",
-    )
-
-    private fun fceumm(): Map<String, String> = mapOf(
-        "fceumm_aspect" to "PP",
-        "fceumm_overscan_h_left" to "0",
-        "fceumm_overscan_h_right" to "0",
-        "fceumm_overscan_v_top" to "8",
-        "fceumm_overscan_v_bottom" to "8",
-    )
-
-    private fun snes9x(): Map<String, String> = mapOf(
-        "snes9x_aspect" to "uncorrected",
-        "snes9x_overscan" to "enabled",
-    )
 }

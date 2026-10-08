@@ -14,7 +14,8 @@ import java.net.URL
  *
  * Cart labels are the real printed labels, scanned, from slot's art set (art.slot-cfw.fyi, the
  * set slot's Cart Studio uses, from ScreenScraper). It covers GB, GBC and GBA, keyed by the
- * ROM's CRC32, so a cart is found whatever its file is called.
+ * ROM's CRC32, so a cart is found whatever its file is called. Labels are what every cart
+ * gets first; the other kinds are there to pick by hand in the cart sheet.
  *
  * Box art, title screens and screenshots come from the libretro thumbnail server
  * (thumbnails.libretro.com), the set RetroArch uses. Files there are named after No-Intro ROM
@@ -45,7 +46,6 @@ class Scraper(private val cacheDir: File) {
     }
 
     private fun label(cart: Cart, dest: File): Result {
-        if (cart.platform !in LABEL_PLATFORMS) return Result.NotFound
         val crc = crcOf(cart) ?: return Result.Failed("Could not read the ROM")
         val path = labelIndex()[crc] ?: return Result.NotFound
         download(ART_BASE + path, dest)
@@ -156,13 +156,6 @@ class Scraper(private val cacheDir: File) {
         private const val BASE = "https://thumbnails.libretro.com"
         private const val ART_BASE = "https://art.slot-cfw.fyi/"
 
-        /** Platforms slot's art set has real label scans for. */
-        val LABEL_PLATFORMS = setOf(Platform.GB, Platform.GBC, Platform.GBA)
-
-        /** The art kinds worth offering for a platform, best first. */
-        fun kindsFor(platform: Platform): List<Kind> =
-            if (platform in LABEL_PLATFORMS) Kind.entries else Kind.entries - Kind.LABEL
-
         @Volatile private var labels: Map<String, String>? = null
 
         /** The ROM's CRC32 as 8 upper-case hex digits; a zip's entry already carries one. */
@@ -195,9 +188,6 @@ class Scraper(private val cacheDir: File) {
             Platform.GB -> listOf("Nintendo - Game Boy", "Nintendo - Game Boy Color")
             Platform.GBC -> listOf("Nintendo - Game Boy Color", "Nintendo - Game Boy")
             Platform.GBA -> listOf("Nintendo - Game Boy Advance")
-            Platform.NES -> listOf("Nintendo - Nintendo Entertainment System")
-            Platform.SNES -> listOf("Nintendo - Super Nintendo Entertainment System")
-            Platform.NDS -> listOf("Nintendo - Nintendo DS")
         }
 
         /** The characters libretro replaces with '_' in thumbnail file names. */
@@ -218,7 +208,7 @@ class Scraper(private val cacheDir: File) {
             return plain.split(NON_WORD).filter { it.isNotEmpty() && it != "the" }.joinToString("")
         }
 
-        private fun regionOf(name: String): String? {
+        fun regionOf(name: String): String? {
             val tags = TAG_GROUP.findAll(name).joinToString(" ") { it.value }.lowercase()
             return when {
                 "usa" in tags || "(u)" in tags || "(ue)" in tags -> "usa"

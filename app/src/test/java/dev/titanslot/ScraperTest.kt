@@ -8,6 +8,7 @@ import dev.titanslot.data.Shells
 import dev.titanslot.data.Scraper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Matching against real names from thumbnails.libretro.com listings. */
@@ -95,9 +96,9 @@ class ScraperTest {
     }
 
     @Test
-    fun `only the Game Boy family has label scans`() {
-        assertEquals(Scraper.Kind.LABEL, Scraper.kindsFor(Platform.GBA).first())
-        assertEquals(Scraper.Kind.BOX, Scraper.kindsFor(Platform.NDS).first())
+    fun `every shelf has a libretro thumbnail system`() {
+        Platform.entries.forEach { assertTrue(Scraper.systemsFor(it).isNotEmpty()) }
+        assertEquals("Nintendo - Game Boy Advance", Scraper.systemsFor(Platform.GBA).single())
     }
 
     @Test

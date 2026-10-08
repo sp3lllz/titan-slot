@@ -5,7 +5,7 @@ import dev.titanslot.core.Platform
 enum class Finish(val label: String) { SOLID("Solid"), CLEAR("Clear"), GLITTER("Glitter") }
 
 /** The outline a cart is drawn with. GB carts come notched (DMG) or rounded (GBC-only). */
-enum class CartShape { GBA, GB_NOTCHED, GB_ROUNDED, NES, SNES, DS }
+enum class CartShape { GBA, GB_NOTCHED, GB_ROUNDED }
 
 data class Shell(val rgb: Int, val finish: Finish = Finish.SOLID)
 
@@ -18,9 +18,6 @@ object Shells {
     val DMG = Shell(0x9A978F)
     val DUAL_MODE = Shell(0x333031)
     val GB_CLEAR = Shell(0x7C7A8A, Finish.CLEAR)
-    val NES = Shell(0x8C8A86)
-    val SNES = Shell(0x9C9BA0)
-    val DS = Shell(0x3A3B40)
 
     private val CLEAR = Shell(0xD9DBD8, Finish.CLEAR)
     private val YOSHI = Shell(0x2F8F4E)
@@ -92,17 +89,11 @@ object Shells {
         "Turquoise" to Shell(0x1F9FB6, Finish.CLEAR),
         "Orange" to Shell(0xF0A95E, Finish.CLEAR),
         "White" to Shell(0xECEEE8),
-        "NES Grey" to NES,
-        "SNES Grey" to SNES,
-        "DS Black" to DS,
     )
 
     fun of(platform: Platform, header: RomHeader?): Pair<Shell, CartShape> = when (platform) {
         Platform.GBA -> gba((header as? RomHeader.Gba)?.code.orEmpty()) to CartShape.GBA
         Platform.GB, Platform.GBC -> gb(platform, header as? RomHeader.Gb)
-        Platform.NES -> NES to CartShape.NES
-        Platform.SNES -> SNES to CartShape.SNES
-        Platform.NDS -> DS to CartShape.DS
     }
 
     private fun gba(code: String): Shell =

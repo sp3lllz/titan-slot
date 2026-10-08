@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
@@ -44,7 +45,7 @@ import kotlin.math.min
 
 /**
  * The picture's size on the panel. Integer scaling uses the largest whole multiple that fits
- * (6x for GB, 4x for GBA, NES and SNES, 3x for both DS screens on 1080 x 1200).
+ * (6x for GB and GBC, 4x for GBA on 1080 x 1200).
  */
 fun gameViewSize(w: Float, h: Float, platform: Platform, scaling: Scaling): Pair<Int, Int> {
     val fit = min(w / platform.nativeW, h / platform.nativeH)
@@ -59,6 +60,15 @@ fun GameScreen(game: GameController) {
     val context = LocalContext.current
     val ui = LocalUi.current
     LaunchedEffect(session) { session.prepare(context) }
+    LaunchedEffect(session.ready) { if (session.ready) game.onReady() }
+
+    // The screen stays on while a game runs (cutscenes, reading), but may sleep on a paused one.
+    val view = LocalView.current
+    val awake = session.ready && !session.paused && session.error == null
+    DisposableEffect(view, awake) {
+        view.keepScreenOn = awake
+        onDispose { view.keepScreenOn = false }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
@@ -75,7 +85,7 @@ fun GameScreen(game: GameController) {
         val cover by animateFloatAsState(if (session.ready) 0f else 1f, tween(260), label = "cover")
         if (cover > 0f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = cover)))
 
-        StatusBar(game.status, session, gapTop = (h - vh) / 2f, gapSide = (w - vw) / 2f)
+        StatusBar(game.status, session, gapTop = (h - vh) / 2f)
 
         session.error?.let { message ->
             Column(
@@ -96,11 +106,11 @@ fun GameScreen(game: GameController) {
 
 /**
  * Clock and battery while playing, plus the fast-forward / rewind marks. It sits in the
- * black band above the picture, or, when the picture fills the height (DS), down the
- * margin beside it. Either way it stays clear of the camera hole in the top left corner.
+ * black band above the picture, or in a small tab over its corner when the picture fills the
+ * screen, clear of the camera hole in the top left corner either way.
  */
 @Composable
-private fun StatusBar(status: SystemStatus, session: GameSession, gapTop: Float, gapSide: Float) {
+private fun StatusBar(status: SystemStatus, session: GameSession, gapTop: Float) {
     val ui = LocalUi.current
     val density = LocalDensity.current
     val speed = when {
@@ -129,14 +139,6 @@ private fun StatusBar(status: SystemStatus, session: GameSession, gapTop: Float,
                     .height(with(density) { gapTop.coerceAtMost(ui.px(80f)).toDp() }),
                 horizontalArrangement = Arrangement.spacedBy(ui.dp(18f), Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
-            ) { items() }
-            gapSide >= ui.px(70f) -> Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .width(with(density) { gapSide.toDp() })
-                    .padding(top = ui.dp(76f)),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(ui.dp(10f)),
             ) { items() }
             else -> Row(
                 modifier = Modifier

@@ -77,9 +77,6 @@ private const val CREEP = 0.03f
 fun cartWidth(cart: Cart): Float = when (cart.platform) {
     dev.titanslot.core.Platform.GBA -> 360f
     dev.titanslot.core.Platform.GB, dev.titanslot.core.Platform.GBC -> 312f
-    dev.titanslot.core.Platform.NES -> 300f
-    dev.titanslot.core.Platform.SNES -> 340f
-    dev.titanslot.core.Platform.NDS -> 276f
 }
 
 /** The slot along the bottom of the panel, after slot's slot_chrome.rs. */
@@ -318,7 +315,7 @@ fun ShelfScreen(app: AppState) {
                 drawRow(shelf, ui, faces, scope, hidden = moving?.key, recede = recede)
                 if (moving == null) drawCaption(shelf, ui, measurer)
             } else if (app.scanned) {
-                drawEmpty(ui, measurer)
+                drawEmpty(app, ui, measurer)
             }
 
             chrome.drawBack(this, 1f)
@@ -541,14 +538,19 @@ private fun DrawScope.drawHints(app: AppState, shelf: ShelfModel, ui: Ui, chrome
     }
 }
 
-private fun DrawScope.drawEmpty(ui: Ui, measurer: TextMeasurer) {
+private fun DrawScope.drawEmpty(app: AppState, ui: Ui, measurer: TextMeasurer) {
+    val keys = app.keyMap
+    val missing = !app.paths.libraryAvailable
     val title = measurer.measure(
-        "No carts on the shelf yet",
+        if (missing) "${app.storage.libraryName} isn't in" else "No carts on the shelf yet",
         TextStyle(fontFamily = LabelFont, fontSize = ui.sp(26f), fontWeight = FontWeight.Bold, color = Ink.menu),
     )
     val body = measurer.measure(
-        "Copy your ROMs into TitanSlot/Games/ on this phone, one folder per system: GB, GBC, GBA, NES, SNES, NDS. " +
-            "Then open Settings with P and pick Rescan Games.",
+        if (missing) {
+            "Your games are on it. Put it back in, or move the shelf in Settings (${keys.hint(Button.MENU)}) › Game Storage."
+        } else {
+            "Press ${keys.hint(Button.A)} or tap here to add Game Boy, Game Boy Color and Game Boy Advance games."
+        },
         TextStyle(fontFamily = LabelFont, fontSize = ui.sp(17f), color = Ink.dim, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
         constraints = Constraints(maxWidth = (size.width - ui.px(110f)).toInt()),
     )

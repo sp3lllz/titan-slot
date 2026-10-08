@@ -33,7 +33,7 @@ import kotlin.math.roundToInt
  * Paints a cart's face into a bitmap: plastic, moulding, label recess and label.
  *
  * GB, GBC and GBA outlines and moulding are slot's (the SVGs in crates/slot-ui/assets, GPL-3.0),
- * in the same 240-wide view boxes. NES, SNES and DS follow the same recipe.
+ * in the same 240-wide view boxes.
  */
 object CartArt {
     private const val FILL_BIAS = 0.3f
@@ -126,37 +126,10 @@ object CartArt {
         topGloss = true,
     )
 
-    private val NES = Spec(
-        vw = 240f, vh = 268f,
-        outline = "M8 0H232A8 8 0 0 1 240 8V260A8 8 0 0 1 232 268H8A8 8 0 0 1 0 260V8A8 8 0 0 1 8 0Z",
-        label = RectF(28f, 20f, 212f, 152f),
-        cuts = (0 until 8).map { i -> rect(18f, 170f + i * 11.5f, 204f, 4.2f) } +
-            rect(4f, 8f, 232f, 1.6f),
-    )
-
-    private val SNES = Spec(
-        vw = 240f, vh = 206f,
-        outline = "M10 0H230A10 10 0 0 1 240 10V178L232 184V202A4 4 0 0 1 228 206H12A4 4 0 0 1 8 202V184L0 178V10A10 10 0 0 1 10 0Z",
-        label = RectF(30f, 32f, 210f, 160f),
-        cuts = listOf(rect(22f, 9f, 196f, 3f), rect(22f, 17f, 196f, 3f)),
-        mark = "SUPER NINTENDO", markY = 176f, markSize = 9.5f,
-    )
-
-    private val DS = Spec(
-        vw = 240f, vh = 226f,
-        outline = "M12 0H198L240 42V214A12 12 0 0 1 228 226H12A12 12 0 0 1 0 214V12A12 12 0 0 1 12 0Z",
-        label = RectF(18f, 52f, 222f, 214f),
-        cuts = (0 until 6).map { i -> rect(20f + i * 9f, 12f, 4f, 26f) },
-        mark = "NINTENDO DS", markX = 138f, markY = 33f, markSize = 11f,
-    )
-
     fun spec(shape: CartShape): Spec = when (shape) {
         CartShape.GBA -> GBA
         CartShape.GB_NOTCHED -> GB_NOTCHED
         CartShape.GB_ROUNDED -> GB_ROUNDED
-        CartShape.NES -> NES
-        CartShape.SNES -> SNES
-        CartShape.DS -> DS
     }
 
     fun render(cart: Cart, widthPx: Int, typeface: Typeface): Bitmap {

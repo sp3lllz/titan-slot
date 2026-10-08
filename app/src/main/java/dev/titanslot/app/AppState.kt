@@ -3,7 +3,6 @@ package dev.titanslot.app
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Environment
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
@@ -12,6 +11,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.titanslot.core.Core
+import dev.titanslot.core.CoreInstaller
 import dev.titanslot.core.Platform
 import dev.titanslot.data.ArtFit
 import dev.titanslot.data.ArtSource
@@ -25,11 +25,12 @@ import dev.titanslot.data.Shell
 import dev.titanslot.data.Shells
 import dev.titanslot.data.Filter
 import dev.titanslot.data.GbPalette
+import dev.titanslot.data.Importer
 import dev.titanslot.data.Library
 import dev.titanslot.data.Paths
 import dev.titanslot.data.Scaling
 import dev.titanslot.data.Settings
-import dev.titanslot.data.StateStore
+import dev.titanslot.data.Storage
 import dev.titanslot.input.Button
 import dev.titanslot.input.KeyMap
 import kotlinx.coroutines.CoroutineScope
@@ -51,18 +52,21 @@ sealed interface Mode {
     data class Ejecting(val cart: Cart) : Mode
 }
 
-enum class Overlay { QUICK_MENU, CART, CONTROLS, ABOUT }
+enum class Overlay { QUICK_MENU, CART, CONTROLS, ABOUT, SETUP }
 
 /** A line being typed on the keyboard in the cart sheet. */
 data class Edit(val row: CartRow, val text: String)
 
 /** What the activity does for the shelf: things that need a window or an intent. */
 interface Host {
-    fun requestStorage()
-    fun launchGame(cart: Cart, core: Core, fresh: Boolean)
+    fun launchGame(cart: Cart, core: Core, fresh: Boolean, paths: Paths)
     fun moveToBack()
     /** Opens the system photo picker. */
     fun pickImage(onPicked: (Uri) -> Unit)
+    /** Opens the system file picker on folders. False when the phone has none. */
+    fun pickFolder(onPicked: (Uri) -> Unit): Boolean
+    /** Opens the system file picker for any number of files. False when the phone has none. */
+    fun pickFiles(onPicked: (List<Uri>) -> Unit): Boolean
     fun openStream(uri: Uri): InputStream?
 }
 
@@ -72,20 +76,29 @@ interface Host {
  * (see [GameController]).
  */
 class AppState(
-    private val host: Host,
+    val host: Host,
     val settings: Settings,
     val keyMap: KeyMap,
     val status: SystemStatus,
     val sfx: Sfx,
-    private val scope: CoroutineScope,
+    val scope: CoroutineScope,
     cacheDir: File,
-    val paths: Paths = Paths.default(),
+    val storage: Storage,
+    val importer: Importer,
+    val cores: CoreInstaller,
 ) {
-    val store = StateStore(paths)
+    /** Where the library and saves are; changes when the card comes or goes, or the library moves. */
+    var paths by mutableStateOf(storage.paths())
+        private set
     private val scraper = Scraper(cacheDir)
     private var props = CartPropsStore(paths.cartProps)
+    val setup = Setup(this)
+    private var restored = false
+    /** Whether every core is installed, checked on resume and after setup (it walks folders). */
+    var coresReady by mutableStateOf(Core.entries.all(cores::isInstalled))
+        private set
 
-    var mode by mutableStateOf<Mode>(Mode.Setup)
+    var mode by mutableStateOf<Mode>(if (storage.setupDone) Mode.Shelf else Mode.Setup)
         private set
     var overlay by mutableStateOf<Overlay?>(null)
         private set
@@ -107,7 +120,10 @@ class AppState(
         private set
     var cartRow by mutableStateOf(CartRow.SCRAPE)
         private set
-    var scrapeKind by mutableStateOf(Scraper.Kind.BOX)
+    var scrapeKind by mutableStateOf(Scraper.Kind.LABEL)
+        private set
+    /** Remove Game asks twice. */
+    var confirmRemove by mutableStateOf(false)
         private set
     var edit by mutableStateOf<Edit?>(null)
         private set
@@ -119,17 +135,22 @@ class AppState(
     var listening by mutableStateOf<Button?>(null)
         private set
 
+    init {
+        if (mode == Mode.Setup) setup.start()
+    }
+
     // ---- lifecycle -------------------------------------------------------------------
 
-    fun hasStorage(): Boolean = Environment.isExternalStorageManager()
-
     fun onResume() {
+        refreshPaths()
+        coresReady = Core.entries.all(cores::isInstalled)
         when {
-            mode == Mode.Setup && hasStorage() -> {
-                mode = Mode.Shelf
+            setup.active -> setup.onResume()
+            mode == Mode.Shelf && !restored -> {
+                restored = true
                 rescan(restore = true)
             }
-            // Coming back from copying games in a file manager: pick them up.
+            // Coming back to the app: pick up a card that went in or out.
             mode == Mode.Shelf && overlay == null -> rescan()
         }
     }
@@ -139,21 +160,56 @@ class AppState(
         aHeld = false
     }
 
-    fun rescan(restore: Boolean = false) {
+    fun refreshPaths() {
+        val next = storage.paths()
+        if (next.library != paths.library || next.libraryAvailable != paths.libraryAvailable) paths = next
+    }
+
+    fun rescan(restore: Boolean = false, then: (() -> Unit)? = null) {
         scope.launch {
             val keep = if (restore) settings.lastCart else shelf?.current?.key
             val keepShelf = if (restore) settings.lastShelf else shelf?.platform?.folder
+            val at = paths
             val found = withContext(Dispatchers.IO) {
-                paths.ensure()
-                props = CartPropsStore(paths.cartProps)
-                Library.scan(paths, props)
+                at.ensure()
+                props = CartPropsStore(at.cartProps)
+                Library.scan(at, props)
             }
             val models = found.filterValues { it.isNotEmpty() }.map { (p, carts) -> ShelfModel(p, carts) }
             shelves = models
             shelfIndex = models.indexOfFirst { it.platform.folder == keepShelf }.coerceAtLeast(0)
             shelf?.let { s -> s.select(s.carts.indexOfFirst { it.key == keep }.coerceAtLeast(0)) }
             scanned = true
+            then?.invoke()
         }
+    }
+
+    // ---- setup ---------------------------------------------------------------------------
+
+    /** Opens setup [steps] over the shelf, e.g. Add Games from Settings. */
+    fun openSetup(vararg steps: SetupStep) {
+        val from = overlay
+        overlay = Overlay.SETUP
+        setup.open(steps.toList(), returnTo = from)
+    }
+
+    /** A on an empty shelf: add games, or find the card they're on. */
+    private fun openEmptyShelf() = openSetup(if (paths.libraryAvailable) SetupStep.GAMES else SetupStep.STORAGE)
+
+    /** The first run's last step: on to the shelf, and fetch art for what was imported. */
+    fun finishSetup(scrapeArt: Boolean) {
+        storage.setupDone = true
+        coresReady = Core.entries.all(cores::isInstalled)
+        overlay = null
+        mode = Mode.Shelf
+        restored = true
+        rescan(restore = true) { if (scrapeArt && shelves.isNotEmpty()) scrapeMissing() }
+    }
+
+    fun closeSetup(returnTo: Overlay?, scrapeArt: Boolean = false) {
+        overlay = returnTo
+        coresReady = Core.entries.all(cores::isInstalled)
+        rescan { if (scrapeArt && shelves.isNotEmpty()) scrapeMissing() }
     }
 
     // ---- toasts ------------------------------------------------------------------------
@@ -170,6 +226,7 @@ class AppState(
             swallowKeyUp = null
             return true
         }
+        if (down && setup.active) setup.capture(keyCode)
         val target = listening ?: return false
         if (keyCode in SYSTEM_KEYS) return false
         if (!down) return true
@@ -183,8 +240,12 @@ class AppState(
 
     fun onKey(button: Button, down: Boolean) {
         when (mode) {
-            Mode.Setup -> if (down && (button == Button.A || button == Button.START)) host.requestStorage()
-            Mode.Shelf -> if (overlay != null) shelfOverlayKey(button, down) else shelfKey(button, down)
+            Mode.Setup -> setup.key(button, down)
+            Mode.Shelf -> when {
+                overlay == Overlay.SETUP -> setup.key(button, down)
+                overlay != null -> shelfOverlayKey(button, down)
+                else -> shelfKey(button, down)
+            }
             is Mode.Inserting, is Mode.Playing, is Mode.Ejecting -> Unit
         }
     }
@@ -196,9 +257,10 @@ class AppState(
             return
         }
         when (mode) {
-            Mode.Setup -> host.moveToBack()
+            Mode.Setup -> setup.back()
             Mode.Shelf -> when (overlay) {
                 null -> host.moveToBack()
+                Overlay.SETUP -> setup.back()
                 Overlay.CONTROLS, Overlay.ABOUT -> {
                     listening = null
                     overlay = Overlay.QUICK_MENU
@@ -245,7 +307,10 @@ class AppState(
             Button.R -> if (down) switchShelf(1)
             Button.A -> {
                 if (down) {
-                    if (s?.current == null) return
+                    if (s?.current == null) {
+                        if (scanned) openEmptyShelf()
+                        return
+                    }
                     aHeld = true
                     aJob?.cancel()
                     aJob = scope.launch {
@@ -289,8 +354,17 @@ class AppState(
     }
 
     fun insert(fresh: Boolean) {
-        val cart = shelf?.current ?: return
         if (mode != Mode.Shelf) return
+        val cart = shelf?.current ?: run {
+            if (scanned && overlay == null) openEmptyShelf()
+            return
+        }
+        val core = settings.coreFor(cart)
+        if (!cores.isInstalled(core)) {
+            toast("${core.title} Isn't Installed Yet")
+            openSetup(SetupStep.CORES)
+            return
+        }
         repeatJob?.cancel()
         settings.lastShelf = cart.platform.folder
         settings.lastCart = cart.key
@@ -304,9 +378,11 @@ class AppState(
     fun onInserted() {
         val m = mode as? Mode.Inserting ?: return
         val core = settings.coreFor(m.cart)
-        Log.i(TAG, "inserted ${m.cart.key} core=${core.id}")
+        // After a save import the old resume state would bring the old save back.
+        val fresh = settings.takeFreshStart(m.cart) || m.fresh
+        Log.i(TAG, "inserted ${m.cart.key} core=${core.id} fresh=$fresh")
         mode = Mode.Playing(m.cart)
-        host.launchGame(m.cart, core, m.fresh)
+        host.launchGame(m.cart, core, fresh, paths)
     }
 
     /** GameActivity has finished (ejected, abandoned or crashed): the cart comes back out. */
@@ -364,6 +440,11 @@ class AppState(
                 overlay = null
                 scrapeMissing()
             }
+            QuickRow.ADD_GAMES -> openSetup(SetupStep.GAMES)
+            QuickRow.IMPORT_SAVES -> openSetup(SetupStep.SAVES)
+            QuickRow.STORAGE -> openSetup(SetupStep.STORAGE)
+            QuickRow.CORES -> openSetup(SetupStep.CORES)
+            QuickRow.SETUP -> openSetup(*SetupStep.entries.filter { it != SetupStep.WELCOME }.toTypedArray())
             QuickRow.ABOUT -> overlay = Overlay.ABOUT
             else -> changeQuick(row, 1)
         }
@@ -377,6 +458,8 @@ class AppState(
         QuickRow.FILTER -> settings.filter.label
         QuickRow.COLOUR_CORRECTION -> onOff(settings.colourCorrection)
         QuickRow.GB_PALETTE -> settings.gbPalette.label
+        QuickRow.STORAGE -> if (storage.libraryVolume == Storage.PHONE) "Phone" else "microSD"
+        QuickRow.CORES -> if (coresReady) "Ready" else "Missing"
         else -> null
     }
 
@@ -396,9 +479,10 @@ class AppState(
     // ---- cart sheet ----------------------------------------------------------------------
 
     private fun openCart() {
-        val cart = shelf?.current ?: return
-        scrapeKind = Scraper.kindsFor(cart.platform).first()
+        if (shelf?.current == null) return
+        scrapeKind = Scraper.Kind.LABEL
         cartRow = CartRow.SCRAPE
+        confirmRemove = false
         edit = null
         overlay = Overlay.CART
     }
@@ -416,6 +500,7 @@ class AppState(
         if (cart.platform == Platform.GB || cart.platform == Platform.GBC) add(CartRow.SHAPE)
         if (cart.platform.cores.size > 1) add(CartRow.CHIP)
         add(CartRow.RESET)
+        add(CartRow.REMOVE)
     }
 
     fun cartValue(cart: Cart, row: CartRow): String? {
@@ -437,6 +522,7 @@ class AppState(
                 else -> "Auto"
             }
             CartRow.CHIP -> settings.coreFor(cart).title
+            CartRow.REMOVE -> if (confirmRemove) "${keyMap.hint(Button.A)} Again To Remove" else null
             CartRow.PICK, CartRow.REMOVE_ART, CartRow.RESET -> null
         }
     }
@@ -445,6 +531,7 @@ class AppState(
         val cart = shelf?.current ?: run { overlay = null; return }
         val rows = cartRows(cart)
         val at = rows.indexOf(cartRow).coerceAtLeast(0)
+        if (b != Button.A) confirmRemove = false
         when (b) {
             Button.UP -> cartRow = rows[(at - 1).mod(rows.size)]
             Button.DOWN -> cartRow = rows[(at + 1).mod(rows.size)]
@@ -458,6 +545,7 @@ class AppState(
 
     fun activateCart(row: CartRow) {
         val cart = shelf?.current ?: return
+        if (row != CartRow.REMOVE || cartRow != CartRow.REMOVE) confirmRemove = false
         cartRow = row
         when (row) {
             CartRow.NAME -> edit = Edit(row, cart.title)
@@ -472,13 +560,14 @@ class AppState(
                 refresh(cart)
                 toast("Cart Reset")
             }
+            CartRow.REMOVE -> if (confirmRemove) removeGame(cart) else confirmRemove = true
             else -> changeCart(cart, row, 1)
         }
     }
 
     private fun changeCart(cart: Cart, row: CartRow, dir: Int) {
         when (row) {
-            CartRow.SCRAPE -> scrapeKind = Scraper.kindsFor(cart.platform).cycle(scrapeKind, dir)
+            CartRow.SCRAPE -> scrapeKind = Scraper.Kind.entries.cycle(scrapeKind, dir)
             CartRow.FIT -> setProps(cart) { it.copy(fit = ArtFit.entries.cycle(cart.fit, dir)) }
             CartRow.COLOUR -> {
                 // Auto, then every preset; a preset brings its finish with it.
@@ -509,6 +598,21 @@ class AppState(
         props.update(cart.key, change)
         sheetTick++
         refresh(cart)
+    }
+
+    /** Takes the ROM and its label off the phone. Saves, states and the cart's settings stay. */
+    private fun removeGame(cart: Cart) {
+        confirmRemove = false
+        scope.launch {
+            val gone = withContext(Dispatchers.IO) { cart.rom.delete().also { if (it) cart.label?.delete() } }
+            if (gone) {
+                overlay = null
+                toast("Removed · Saves Kept")
+                rescan()
+            } else {
+                toast("Could Not Remove It")
+            }
+        }
     }
 
     /** Rebuilds [cart] from disk (header, label, properties) and swaps it onto its shelf. */
@@ -576,16 +680,15 @@ class AppState(
     }
 
     /**
-     * Art for every cart that needs it: real label scans for GB, GBC and GBA, box art for the
-     * rest. Fills carts with no art, and swaps box art this app scraped for a real label once
-     * one exists; art you put in Labels/ yourself, or picked from the phone, is left alone.
+     * A real cart label scan for every cart that needs one. Fills carts with no art, and swaps
+     * box art this app scraped for a real label once one exists; art you put in Labels/
+     * yourself, or picked from the phone, is left alone.
      */
     fun scrapeMissing() {
         if (bulkJob?.isActive == true) return
         val scraped = setOf(ArtSource.BOX, ArtSource.TITLE, ArtSource.SNAP)
         val todo = shelves.flatMap { it.carts }.filter { cart ->
-            val kind = Scraper.kindsFor(cart.platform).first()
-            cart.label == null || (kind == Scraper.Kind.LABEL && props[cart.key].art in scraped)
+            cart.label == null || props[cart.key].art in scraped
         }
         if (todo.isEmpty()) {
             toast("Every Cart Has Art")
@@ -595,7 +698,7 @@ class AppState(
             var found = 0
             for ((i, cart) in todo.withIndex()) {
                 toast("Scraping ${i + 1} of ${todo.size}")
-                when (val r = scrapeInto(cart, Scraper.kindsFor(cart.platform).first(), focus = false)) {
+                when (val r = scrapeInto(cart, Scraper.Kind.LABEL, focus = false)) {
                     is Scraper.Result.Found -> found++
                     is Scraper.Result.Failed -> {
                         toast(r.reason)

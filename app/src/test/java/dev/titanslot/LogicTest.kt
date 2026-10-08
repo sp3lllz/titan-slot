@@ -79,11 +79,10 @@ class LogicTest {
         val w = 1080f
         val h = 1200f
         assertEquals(960 to 864, gameViewSize(w, h, Platform.GB, Scaling.INTEGER))
+        assertEquals(960 to 864, gameViewSize(w, h, Platform.GBC, Scaling.INTEGER))
         assertEquals(960 to 640, gameViewSize(w, h, Platform.GBA, Scaling.INTEGER))
-        assertEquals(1024 to 896, gameViewSize(w, h, Platform.NES, Scaling.INTEGER))
-        assertEquals(1024 to 896, gameViewSize(w, h, Platform.SNES, Scaling.INTEGER))
-        assertEquals(768 to 1152, gameViewSize(w, h, Platform.NDS, Scaling.INTEGER))
-        assertEquals(800 to 1200, gameViewSize(w, h, Platform.NDS, Scaling.FIT))
+        assertEquals(1080 to 972, gameViewSize(w, h, Platform.GB, Scaling.FIT))
+        assertEquals(1080 to 720, gameViewSize(w, h, Platform.GBA, Scaling.FIT))
     }
 
     @Test
@@ -135,9 +134,12 @@ class LogicTest {
         assertEquals(Platform.GB, Library.platformOf(File("Zelda.gb"), Platform.GBA))
         assertEquals(Platform.GBC, Library.platformOf(File("Tetris DX.gb"), Platform.GBC))
         assertEquals(Platform.GBA, Library.platformOf(File("Metroid.gba"), Platform.GB))
-        assertEquals(Platform.NDS, Library.platformOf(File("Platinum.nds"), null))
-        assertEquals(Platform.NES, Library.platformOf(File("Contra.zip"), Platform.NES))
+        assertEquals(Platform.GBA, Library.platformOf(File("Advance Wars.zip"), Platform.GBA))
         assertNull(Library.platformOf(File("notes.txt"), Platform.GBA))
+        // NES, SNES and DS are gone from the shelf.
+        assertNull(Library.platformOf(File("Contra.nes"), null))
+        assertNull(Library.platformOf(File("Platinum.nds"), null))
+        assertNull(Library.platformOf(File("Mario World.sfc"), null))
     }
 
     @Test

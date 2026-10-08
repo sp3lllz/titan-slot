@@ -53,6 +53,29 @@ class Settings(context: Context) {
 
     fun setCore(cart: Cart, core: Core) = prefs.edit { putString("core:${cart.key}", core.id) }
 
+    // Written only by the game process. SharedPreferences don't merge across processes, so it
+    // gets a file of its own that the shelf's process never rewrites.
+    private val hints = context.getSharedPreferences("hints", Context.MODE_PRIVATE)
+
+    /** How many more games start with the controls hint. */
+    var hintsLeft: Int
+        get() = hints.getInt("left", 3)
+        set(v) = hints.edit { putInt("left", v) }
+
+    /**
+     * After a battery save is imported, the next start skips the resume state: a state holds
+     * the game's save memory too, and loading an old one would put the old save back.
+     */
+    fun startFreshNextTime(cart: Cart) = prefs.edit { putBoolean("fresh:${cart.key}", true) }
+
+    /** True once if [cart] was marked by [startFreshNextTime]. */
+    fun takeFreshStart(cart: Cart): Boolean {
+        val key = "fresh:${cart.key}"
+        if (!prefs.getBoolean(key, false)) return false
+        prefs.edit { remove(key) }
+        return true
+    }
+
     private fun intPref(key: String, default: Int) = Pref(
         mutableIntStateOf(prefs.getInt(key, default)),
     ) { prefs.edit { putInt(key, it) } }

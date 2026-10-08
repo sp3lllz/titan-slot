@@ -14,12 +14,17 @@ enum class QuickRow(val label: String) {
     COLOUR_CORRECTION("Colour Correction"),
     GB_PALETTE("Game Boy Palette"),
     CONTROLS("Controls"),
+    ADD_GAMES("Add Games"),
+    IMPORT_SAVES("Import Saves"),
     SCRAPE_MISSING("Scrape Cart Art"),
+    STORAGE("Game Storage"),
+    CORES("Emulator Cores"),
     RESCAN("Rescan Games"),
+    SETUP("Setup Guide"),
     ABOUT("About");
 
-    /** Rows that open something rather than cycle a value. */
-    val opens: Boolean get() = this == CONTROLS || this == SCRAPE_MISSING || this == RESCAN || this == ABOUT
+    /** Rows whose value Left / Right cycles. */
+    val cycles: Boolean get() = ordinal <= GB_PALETTE.ordinal
 }
 
 /** The in-game menu on a tap of MENU. */
@@ -27,6 +32,7 @@ enum class PauseRow(val label: String) {
     RESUME("Resume"),
     SAVE_STATE("Save State"),
     LOAD_STATE("Load Last State"),
+    UNDO_LOAD("Undo Load"),
     STATES("Save States"),
     RESET("Reset Game"),
     EJECT("Eject"),
@@ -43,7 +49,8 @@ enum class CartRow(val label: String) {
     FINISH("Finish"),
     SHAPE("Outline"),
     CHIP("Chip"),
-    RESET("Reset Cart");
+    RESET("Reset Cart"),
+    REMOVE("Remove Game");
 
     /** Rows whose value Left / Right cycles. */
     val cycles: Boolean get() = this in setOf(SCRAPE, FIT, COLOUR, FINISH, SHAPE, CHIP)

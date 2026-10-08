@@ -17,6 +17,7 @@ import androidx.core.content.edit
  *   I        X              O  Y
  *   P        Menu (and the system Back gesture)
  *   N        fast-forward   X  rewind
+ *   Q        quick save (hold to quick load)
  *
  * A Bluetooth gamepad works too: its buttons are always mapped, see [GAMEPAD].
  */
@@ -29,6 +30,9 @@ class KeyMap(context: Context) {
     private var lookup: Map<Int, Button> = index(bindings)
 
     fun buttonFor(keyCode: Int): Button? = lookup[keyCode] ?: GAMEPAD[keyCode]
+
+    /** The name of the key bound to [button], e.g. "K", for on-screen hints. */
+    fun hint(button: Button): String = bindings[button].orEmpty().firstOrNull()?.let(::keyName) ?: button.label
 
     /** Binds [keyCode] to [button] alone, taking it away from whatever had it before. */
     fun bind(button: Button, keyCode: Int) {
@@ -78,6 +82,7 @@ class KeyMap(context: Context) {
             Button.MENU to listOf(KeyEvent.KEYCODE_P),
             Button.FAST_FORWARD to listOf(KeyEvent.KEYCODE_N),
             Button.REWIND to listOf(KeyEvent.KEYCODE_X),
+            Button.QUICK_SAVE to listOf(KeyEvent.KEYCODE_Q),
         )
 
         /** Gamepad and arrow keys, always on so a controller works without setup. */
@@ -97,6 +102,7 @@ class KeyMap(context: Context) {
             KeyEvent.KEYCODE_BUTTON_START to Button.START,
             KeyEvent.KEYCODE_BUTTON_SELECT to Button.SELECT,
             KeyEvent.KEYCODE_BUTTON_MODE to Button.MENU,
+            KeyEvent.KEYCODE_BUTTON_THUMBL to Button.QUICK_SAVE,
         )
 
         fun keyName(keyCode: Int): String =
