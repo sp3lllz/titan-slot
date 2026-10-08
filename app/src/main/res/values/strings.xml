@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Titan Slot</string>
+    <!-- Feature module titles, shown by Google Play while a core downloads. -->
+    <string name="core_gambatte">Game Boy emulator (Gambatte)</string>
+    <string name="core_mgba">Game Boy Advance emulator (mGBA)</string>
 </resources>

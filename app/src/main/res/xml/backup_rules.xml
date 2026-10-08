@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 (API 30). The same as data_extraction_rules.xml's cloud backup. -->
+<full-backup-content>
+    <include domain="sharedpref" path="settings.xml" />
+    <include domain="sharedpref" path="keymap.xml" />
+    <include domain="external" path="Saves/" />
+    <include domain="external" path="Config/" />
+</full-backup-content>

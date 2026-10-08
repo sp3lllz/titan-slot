@@ -14,11 +14,26 @@ android {
         applicationId = "dev.titanslot"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
-        // The Titan 2 Elite is arm64, and so are the bundled libretro cores.
+        versionCode = 2
+        versionName = "0.2.0"
+        // The Titan 2 Elite is arm64, and so are the libretro cores.
         ndk { abiFilters += "arm64-v8a" }
     }
+
+    // Where the emulator cores come from. Neither flavour has them in the base APK: the setup
+    // wizard installs them (dev.titanslot.core.Delivery, one per flavour).
+    flavorDimensions += "distribution"
+    productFlavors {
+        // Google Play. Play doesn't allow downloading native code from anywhere else, so each
+        // core is an on-demand feature module (:core_gambatte, :core_mgba) that Play delivers.
+        // Upload the bundle: ./gradlew bundlePlayRelease
+        create("play") { dimension = "distribution" }
+        // Sideloaded APKs (./gradlew assembleDirectRelease): setup downloads the cores from the
+        // libretro buildbot instead.
+        create("direct") { dimension = "distribution" }
+    }
+
+    dynamicFeatures += setOf(":core_gambatte", ":core_mgba")
 
     buildTypes {
         release {
@@ -68,6 +83,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    "playImplementation"("com.google.android.play:feature-delivery:2.1.0")
 
     testImplementation("junit:junit:4.13.2")
 }

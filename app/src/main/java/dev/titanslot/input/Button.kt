@@ -5,7 +5,7 @@ import android.view.KeyEvent
 /**
  * What a key means. The first twelve are console buttons and carry the Android gamepad
  * keycode LibretroDroid turns into the matching RETRO_DEVICE_ID_JOYPAD_* (A is the right
- * face button, B the bottom one, Nintendo style). The last three are frontend hotkeys.
+ * face button, B the bottom one, Nintendo style). The rest are frontend hotkeys.
  */
 enum class Button(val label: String, val gamepadKey: Int?) {
     UP("D-Pad Up", KeyEvent.KEYCODE_DPAD_UP),
@@ -22,7 +22,10 @@ enum class Button(val label: String, val gamepadKey: Int?) {
     SELECT("Select", KeyEvent.KEYCODE_BUTTON_SELECT),
     MENU("Menu", null),
     FAST_FORWARD("Fast Forward", null),
-    REWIND("Rewind", null);
+    REWIND("Rewind", null),
+
+    /** Tap to save a state, hold to load the newest one. */
+    QUICK_SAVE("Quick Save", null);
 
     val isConsole: Boolean get() = gamepadKey != null
 }

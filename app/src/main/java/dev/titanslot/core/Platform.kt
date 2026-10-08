@@ -14,8 +14,6 @@ enum class Platform(
     val cores: List<Core>,
     val nativeW: Int,
     val nativeH: Int,
-    val usesShoulders: Boolean,
-    val rewind: Boolean,
 ) {
     GB(
         folder = "GB",
@@ -24,8 +22,6 @@ enum class Platform(
         extensions = setOf("gb", "gbc", "sgb"),
         cores = listOf(Core.GAMBATTE, Core.MGBA),
         nativeW = 160, nativeH = 144,
-        usesShoulders = false,
-        rewind = true,
     ),
     GBC(
         folder = "GBC",
@@ -34,8 +30,6 @@ enum class Platform(
         extensions = setOf("gbc", "gb"),
         cores = listOf(Core.GAMBATTE, Core.MGBA),
         nativeW = 160, nativeH = 144,
-        usesShoulders = false,
-        rewind = true,
     ),
     GBA(
         folder = "GBA",
@@ -44,40 +38,6 @@ enum class Platform(
         extensions = setOf("gba", "agb"),
         cores = listOf(Core.MGBA),
         nativeW = 240, nativeH = 160,
-        usesShoulders = true,
-        rewind = true,
-    ),
-    NES(
-        folder = "NES",
-        title = "Nintendo Entertainment System",
-        tab = "NES",
-        extensions = setOf("nes", "fds", "unf", "unif"),
-        cores = listOf(Core.FCEUMM),
-        nativeW = 256, nativeH = 224,
-        usesShoulders = false,
-        rewind = true,
-    ),
-    SNES(
-        folder = "SNES",
-        title = "Super Nintendo",
-        tab = "SNES",
-        extensions = setOf("sfc", "smc", "swc", "fig", "bs"),
-        cores = listOf(Core.SNES9X),
-        nativeW = 256, nativeH = 224,
-        usesShoulders = true,
-        rewind = true,
-    ),
-    NDS(
-        folder = "NDS",
-        title = "Nintendo DS",
-        tab = "DS",
-        extensions = setOf("nds"),
-        cores = listOf(Core.MELONDS),
-        // Both screens stacked, no gap.
-        nativeW = 256, nativeH = 384,
-        usesShoulders = true,
-        // DS states are several megabytes; snapshotting them 15 times a second is not worth it.
-        rewind = false,
     );
 
     val defaultCore: Core get() = cores.first()

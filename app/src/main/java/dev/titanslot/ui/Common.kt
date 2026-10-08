@@ -27,8 +27,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
-import dev.titanslot.input.Button
-import dev.titanslot.input.KeyMap
 
 /**
  * slot draws on a 720 x 480 panel. Everything here is laid out in those units ("u"), scaled
@@ -61,10 +59,6 @@ fun label(size: Float, color: Color = Ink.menu, weight: FontWeight = FontWeight.
         letterSpacing = spacing.em,
     )
 }
-
-/** The key names bound to [button], e.g. "K", for on-screen hints. */
-fun KeyMap.hint(button: Button): String =
-    bindings[button].orEmpty().firstOrNull()?.let { KeyMap.keyName(it) } ?: button.label
 
 /** A row of "KEY action" hints along the bottom of a menu, like slot's legends. */
 @Composable

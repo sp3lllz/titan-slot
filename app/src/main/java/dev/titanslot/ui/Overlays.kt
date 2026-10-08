@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,7 +61,6 @@ import dev.titanslot.app.GameController
 import dev.titanslot.app.GameOverlay
 import dev.titanslot.app.Toast
 import dev.titanslot.app.Overlay
-import dev.titanslot.app.PauseRow
 import dev.titanslot.app.QuickRow
 import dev.titanslot.data.SaveState
 import dev.titanslot.input.Button
@@ -79,6 +79,7 @@ fun ShelfOverlays(app: AppState) {
         Overlay.CART -> CartSheet(app)
         Overlay.CONTROLS -> Controls(app)
         Overlay.ABOUT -> About(app)
+        Overlay.SETUP -> SetupScreen(app)
         null -> Unit
     }
 }
@@ -93,7 +94,7 @@ fun GameOverlays(game: GameController) {
 }
 
 @Composable
-private fun Sheet(alpha: Float = 1f, content: @Composable () -> Unit) {
+internal fun Sheet(alpha: Float = 1f, content: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
@@ -131,25 +132,41 @@ private fun Header(title: String, subtitle: String? = null) {
 private fun QuickMenu(app: AppState) {
     val ui = LocalUi.current
     val keys = app.keyMap
+    val list = rememberLazyListState()
+    KeepInView(list, app.quickRow.ordinal)
     Sheet {
         Column(Modifier.fillMaxSize()) {
             Header("Settings")
-            QuickRow.entries.forEach { row ->
-                MenuRow(
-                    text = row.label,
-                    value = app.quickValue(row),
-                    selected = row == app.quickRow,
-                    pitch = 52f,
-                    onClick = { app.activateQuick(row) },
-                )
+            LazyColumn(Modifier.weight(1f), state = list) {
+                items(QuickRow.entries) { row ->
+                    MenuRow(
+                        text = row.label,
+                        value = app.quickValue(row),
+                        selected = row == app.quickRow,
+                        pitch = 50f,
+                        onClick = { app.activateQuick(row) },
+                        carets = row.cycles,
+                    )
+                }
             }
-            Spacer(Modifier.weight(1f))
             Legend(
                 "${keys.hint(Button.LEFT)} ${keys.hint(Button.RIGHT)}" to "Change",
                 keys.hint(Button.A) to "Select",
                 keys.hint(Button.B) to "Back",
-                modifier = Modifier.padding(bottom = ui.dp(30f)),
+                modifier = Modifier.padding(top = ui.dp(10f), bottom = ui.dp(30f)),
             )
+        }
+    }
+}
+
+/** Scrolls [list] so the selected row [at] stays on screen as the keys move it. */
+@Composable
+private fun KeepInView(list: androidx.compose.foundation.lazy.LazyListState, at: Int) {
+    LaunchedEffect(at) {
+        val first = list.firstVisibleItemIndex
+        val visible = list.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+        if (at < first || at >= first + visible - 1) {
+            list.animateScrollToItem((at - visible / 2).coerceAtLeast(0))
         }
     }
 }
@@ -230,13 +247,7 @@ private fun Controls(app: AppState) {
     val ui = LocalUi.current
     val keys = app.keyMap
     val list = rememberLazyListState()
-    LaunchedEffect(app.controlsRow) {
-        val first = list.firstVisibleItemIndex
-        val visible = list.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
-        if (app.controlsRow < first || app.controlsRow >= first + visible - 1) {
-            list.animateScrollToItem((app.controlsRow - visible / 2).coerceAtLeast(0))
-        }
-    }
+    KeepInView(list, app.controlsRow)
     Sheet {
         Column(Modifier.fillMaxSize()) {
             Header("Controls", "Titan 2 Elite keyboard")
@@ -293,7 +304,7 @@ private fun About(app: AppState) {
             Spacer(Modifier.weight(1f))
             BasicText("titan slot.", style = label(48f, Ink.menu, FontWeight.Bold))
             BasicText(
-                "A cartridge-shelf frontend for the Unihertz Titan 2 Elite",
+                "A Game Boy cartridge shelf for the Unihertz Titan 2 Elite",
                 modifier = Modifier.padding(top = ui.dp(8f), bottom = ui.dp(30f)),
                 style = label(17f, Ink.dim).copy(textAlign = TextAlign.Center),
             )
@@ -301,11 +312,12 @@ private fun About(app: AppState) {
                 "Interface after slot by Brandon Kowalski, GPL-3.0",
                 "Cart labels: slot's art set, from ScreenScraper (CC BY-NC-SA 4.0)",
                 "Box art: the libretro thumbnails",
-                "Cores: Gambatte, mGBA, melonDS, FCEUmm, Snes9x",
+                "Cores: Gambatte (GPL-2.0) and mGBA (MPL-2.0), from libretro",
                 "Frontend library: LibretroDroid by Filippo Scognamiglio",
                 "Game process design after Lemuroid",
                 "Type: Open Sans, SIL Open Font License",
                 "Cart sounds: slot's recording of a GBA",
+                "Source code (GPL-3.0): github.com/sp3lllz/titan-slot",
             ).forEach {
                 BasicText(
                     it,
@@ -314,12 +326,12 @@ private fun About(app: AppState) {
                 )
             }
             BasicText(
-                "Games live in ${app.paths.root.path}",
+                "Games: ${app.paths.library.path}\nSaves: ${app.paths.data.path}",
                 modifier = Modifier.padding(top = ui.dp(26f)),
                 style = label(15f, Ink.faint).copy(textAlign = TextAlign.Center),
             )
             BasicText(
-                "Game Boy, Nintendo DS, NES and Super Nintendo are trademarks of Nintendo. " +
+                "Game Boy, Game Boy Color and Game Boy Advance are trademarks of Nintendo. " +
                     "This app is not affiliated with Nintendo.",
                 modifier = Modifier.padding(top = ui.dp(10f)),
                 style = label(13f, Ink.faint).copy(textAlign = TextAlign.Center),
@@ -341,7 +353,7 @@ private fun PauseMenu(game: GameController) {
         Column(Modifier.fillMaxSize()) {
             Header("Paused", session.cart.title)
             Spacer(Modifier.weight(1f))
-            PauseRow.entries.forEach { row ->
+            game.pauseRows().forEach { row ->
                 MenuRow(
                     text = row.label,
                     value = null,
@@ -357,8 +369,8 @@ private fun PauseMenu(game: GameController) {
                 verticalArrangement = Arrangement.spacedBy(ui.dp(12f)),
             ) {
                 Legend(
-                    "${keys.hint(Button.SELECT)}+${keys.hint(Button.R)}" to "Save",
-                    "${keys.hint(Button.SELECT)}+${keys.hint(Button.L)}" to "Load",
+                    keys.hint(Button.QUICK_SAVE) to "Quick save",
+                    "hold ${keys.hint(Button.QUICK_SAVE)}" to "Quick load",
                     "hold ${keys.hint(Button.MENU)}" to "Eject",
                 )
                 Legend(
@@ -455,7 +467,7 @@ private fun Polaroid(state: SaveState, modifier: Modifier) {
     }
 }
 
-// ---- toast & setup --------------------------------------------------------------------------
+// ---- toast ----------------------------------------------------------------------------------
 
 @Composable
 fun ToastHost(toast: Toast?, modifier: Modifier = Modifier) {
@@ -478,27 +490,5 @@ fun ToastHost(toast: Toast?, modifier: Modifier = Modifier) {
         ) {
             BasicText(toast.text.uppercase(), style = label(17f, Ink.menu, FontWeight.Bold, 0.14f))
         }
-    }
-}
-
-@Composable
-fun SetupScreen(app: AppState) {
-    val ui = LocalUi.current
-    Column(
-        Modifier
-            .fillMaxSize()
-            .clickable(remember { MutableInteractionSource() }, indication = null) { app.onKey(Button.A, true) }
-            .padding(horizontal = ui.dp(50f)),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        BasicText("titan slot.", style = label(56f, Ink.menu, FontWeight.Bold))
-        BasicText(
-            "Your games live in a TitanSlot folder on this phone, so you can copy them over USB. " +
-                "Android asks you to allow All files access for that.",
-            modifier = Modifier.padding(top = ui.dp(24f), bottom = ui.dp(40f)),
-            style = label(19f, Ink.dim).copy(textAlign = TextAlign.Center),
-        )
-        Legend(app.keyMap.hint(Button.A) to "Allow access")
     }
 }

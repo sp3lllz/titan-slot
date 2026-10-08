@@ -40,9 +40,11 @@ fun UiRoot(content: @Composable () -> Unit) {
 fun TitanSlotApp(app: AppState) = UiRoot {
     when (app.mode) {
         Mode.Setup -> SetupScreen(app)
-        else -> ShelfScreen(app)
+        else -> {
+            ShelfScreen(app)
+            ShelfOverlays(app)
+        }
     }
-    ShelfOverlays(app)
     ToastHost(app.toast)
 }
 

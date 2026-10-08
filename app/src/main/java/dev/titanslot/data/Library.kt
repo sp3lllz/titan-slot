@@ -19,13 +19,14 @@ object Library {
         "gb" to Platform.GB, "sgb" to Platform.GB,
         "gbc" to Platform.GBC,
         "gba" to Platform.GBA, "agb" to Platform.GBA,
-        "nes" to Platform.NES, "fds" to Platform.NES, "unf" to Platform.NES, "unif" to Platform.NES,
-        "sfc" to Platform.SNES, "smc" to Platform.SNES, "swc" to Platform.SNES, "fig" to Platform.SNES, "bs" to Platform.SNES,
-        "nds" to Platform.NDS,
     )
+
+    /** File types Add Games copies in: ROMs, and zips holding them. */
+    val IMPORTABLE: Set<String> = BY_EXTENSION.keys + "zip"
 
     fun scan(paths: Paths, props: CartPropsStore): Map<Platform, List<Cart>> {
         val found = Platform.entries.associateWith { mutableListOf<File>() }
+        if (!paths.libraryAvailable) return found.mapValues { emptyList() }
         val root = paths.games
         root.walkTopDown()
             .onEnter { it == root || !it.name.startsWith(".") }
@@ -52,6 +53,12 @@ object Library {
         return BY_EXTENSION[ext]
     }
 
+    /** Every ROM inside a zip, by entry name, for zips that hold a whole collection. */
+    fun romsInZip(zip: java.util.zip.ZipFile): List<java.util.zip.ZipEntry> =
+        zip.entries().asSequence()
+            .filter { !it.isDirectory && BY_EXTENSION.containsKey(it.name.substringAfterLast('.').lowercase()) }
+            .toList()
+
     private fun zipContents(rom: File): Platform? = runCatching {
         ZipFile(rom).use { zip ->
             zip.entries().asSequence()
@@ -61,7 +68,7 @@ object Library {
     }.getOrNull()
 
     /** One cart, rebuilt after an edit, or for the game process (which is handed a ROM). */
-    fun cartFor(platform: Platform, rom: File, paths: Paths = Paths.default(), props: CartPropsStore? = null): Cart =
+    fun cartFor(platform: Platform, rom: File, paths: Paths, props: CartPropsStore? = null): Cart =
         cart(platform, rom, labelIndex(paths.labels(platform)), props)
 
     /** Where a cart's own label lives: scraped, picked from the phone or dropped in by hand. */

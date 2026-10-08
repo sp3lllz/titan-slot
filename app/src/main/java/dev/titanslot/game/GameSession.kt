@@ -16,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import dev.titanslot.core.Core
+import dev.titanslot.core.CoreFiles
 import dev.titanslot.core.CoreOptions
 import dev.titanslot.data.Cart
 import dev.titanslot.data.Paths
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -70,9 +72,17 @@ class GameSession(
         private set
     var paused by mutableStateOf(false)
         private set
+    /** Set after a state is loaded over the game, until that load is undone. */
+    var canUndoLoad by mutableStateOf(false)
+        private set
 
+    private var corePath: File? = null
     private var romPath: File? = null
     private var sram: ByteArray? = null
+    /** The battery save as last written, so the periodic flush only writes changes. */
+    private var written: ByteArray? = null
+    /** The game as it was just before the last load. */
+    private var undo: ByteArray? = null
     private var view: GLRetroView? = null
     private val rewind = RewindBuffer(maxBytes = 96L * 1024 * 1024)
     private val held = mutableSetOf<Button>()
@@ -85,8 +95,11 @@ class GameSession(
         Log.i(TAG, "prepare ${cart.rom.name}")
         try {
             withContext(Dispatchers.IO) {
+                corePath = CoreFiles.find(context, core)
+                    ?: error("${core.title} isn't installed. Eject, then install it from Settings > Emulator Cores.")
                 romPath = RomFile.resolve(cart, context.cacheDir)
                 sram = store.readSram(cart)
+                written = sram
                 paths.saves(cart.platform).mkdirs()
             }
             prepared = true
@@ -99,9 +112,9 @@ class GameSession(
 
     fun createView(context: Context): GLRetroView {
         view?.let { return it }
-        Log.i(TAG, "createView core=${core.library}")
+        Log.i(TAG, "createView core=$corePath")
         val data = GLRetroViewData(context).apply {
-            coreFilePath = File(context.applicationInfo.nativeLibraryDir, core.library).path
+            coreFilePath = corePath!!.path
             gameFilePath = romPath!!.path
             systemDirectory = paths.bios.apply { mkdirs() }.path
             savesDirectory = paths.saves(cart.platform).path
@@ -133,17 +146,35 @@ class GameSession(
         scope.launch {
             v.getGLRetroEvents().filterIsInstance<GLRetroView.GLRetroEvents.FrameRendered>().first()
             Log.i(TAG, "first frame")
-            if (!fresh) store.latest(cart, core)?.let { Log.i(TAG, "loading ${it.file.name}: ${load(it)}") }
+            if (!fresh) store.latest(cart, core)?.let { Log.i(TAG, "loading ${it.file.name}: ${load(it, undoable = false)}") }
             ready = true
             Log.i(TAG, "ready")
+            launch { flushSram(v) }
             record(v)
         }
         return v
     }
 
+    /**
+     * Writes the battery save every half minute while it changes, so a crash or a flat
+     * battery costs at most that much of an in-game save.
+     */
+    private suspend fun flushSram(v: GLRetroView) {
+        while (true) {
+            delay(SRAM_FLUSH_MS)
+            if (paused || !lifecycle.isResumed) continue
+            runCatching {
+                val bytes = withContext(Dispatchers.IO) { v.serializeSRAM() }
+                if (bytes.isNotEmpty() && !bytes.contentEquals(written)) {
+                    withContext(Dispatchers.IO) { store.writeSram(cart, bytes) }
+                    written = bytes
+                }
+            }.onFailure { Log.w(TAG, "Battery save flush failed", it) }
+        }
+    }
+
     /** Snapshots for rewind every 4th frame, and plays them back while it is held. */
     private suspend fun record(v: GLRetroView) {
-        if (!cart.platform.rewind) return
         var frame = 0
         v.getGLRetroEvents().filterIsInstance<GLRetroView.GLRetroEvents.FrameRendered>().collect {
             frame++
@@ -174,7 +205,7 @@ class GameSession(
     }
 
     fun holdRewind(on: Boolean) {
-        if (!cart.platform.rewind || !settings.rewind) return
+        if (!settings.rewind) return
         rewinding = on
         applySpeed()
     }
@@ -222,12 +253,32 @@ class GameSession(
         return withContext(Dispatchers.IO) { store.write(cart, core, bytes, thumb, auto) }
     }
 
-    suspend fun load(state: SaveState): Boolean {
+    /** Loads [state] over the game. With [undoable], the game as it was can be put back. */
+    suspend fun load(state: SaveState, undoable: Boolean = true): Boolean {
         val v = view ?: return false
         if (!lifecycle.isResumed) return false
         val bytes = withContext(Dispatchers.IO) { runCatching { state.file.readBytes() }.getOrNull() } ?: return false
+        val before = if (undoable) withContext(Dispatchers.IO) { runCatching { v.serializeState() }.getOrNull() } else null
         val ok = withContext(Dispatchers.IO) { v.unserializeState(bytes) }
         v.queueEvent { rewind.clear() }
+        if (ok && before != null && before.isNotEmpty()) {
+            undo = before
+            canUndoLoad = true
+        }
+        return ok
+    }
+
+    /** Puts the game back the way it was before the last load. */
+    suspend fun undoLoad(): Boolean {
+        val v = view ?: return false
+        val bytes = undo ?: return false
+        if (!lifecycle.isResumed) return false
+        val ok = withContext(Dispatchers.IO) { v.unserializeState(bytes) }
+        v.queueEvent { rewind.clear() }
+        if (ok) {
+            undo = null
+            canUndoLoad = false
+        }
         return ok
     }
 
@@ -240,6 +291,7 @@ class GameSession(
         if (!ready || !lifecycle.isResumed) return
         val bytes = withContext(Dispatchers.IO) { v.serializeSRAM() }
         withContext(Dispatchers.IO) { store.writeSram(cart, bytes) }
+        written = bytes
     }
 
     /** The cart is coming out: write the battery save and a resume state, then stop. */
@@ -269,6 +321,7 @@ class GameSession(
         runCatching {
             val sram = v.serializeSRAM()
             store.writeSram(cart, sram)
+            if (sram.isNotEmpty()) written = sram
             val state = v.serializeState()
             if (state.isNotEmpty()) store.write(cart, core, state, null, auto = true)
             Log.i(TAG, "persisted sram=${sram.size} state=${state.size}")
@@ -294,5 +347,6 @@ class GameSession(
     private companion object {
         const val TAG = "GameSession"
         const val THUMB_W = 480
+        const val SRAM_FLUSH_MS = 30_000L
     }
 }
