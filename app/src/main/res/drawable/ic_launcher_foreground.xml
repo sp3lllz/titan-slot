@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A Game Boy Advance cart half inserted into the slot. Silhouette from slot's cart.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.2"
+        android:scaleY="0.2"
+        android:translateX="30"
+        android:translateY="46">
+        <path
+            android:fillColor="#35353A"
+            android:pathData="M10.72,0 L229.29,0 C229.39,0 229.48,0.02 229.58,0.05 L232.48,0.82 L234.86,2.16 L236.87,4.11 L238.8,7.37 L239.96,11.56 L240,25.57 L238.86,27.83 L236.06,28.89 L233.5,28.89 L233.5,136.73 L232.34,139.04 L228.94,141 L11.06,141 L7.65,139.04 L6.49,136.73 L6.49,28.89 L3.93,28.89 L1.13,27.83 L0,25.57 L0,11.85 L1.21,7.37 L3.13,4.11 L5.14,2.16 L7.52,0.82 Z" />
+        <path
+            android:fillColor="#1A1A1D"
+            android:pathData="M29,30h182v96h-182z" />
+        <path
+            android:fillColor="#E9A826"
+            android:pathData="M32.4,32.6h177.6v91.8h-177.6z" />
+        <path
+            android:fillColor="#F6F4EF"
+            android:pathData="M60,62h120v10h-120z M80,82h80v8h-80z" />
+    </group>
+</vector>

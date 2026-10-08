@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#050508" android:pathData="M0,0h108v108h-108z" />
+    <!-- The slot's housing band along the bottom. -->
+    <path android:fillColor="#242429" android:pathData="M0,74h108v34h-108z" />
+    <path android:fillColor="#4D4D57" android:pathData="M30,74h48v1.2h-48z" />
+    <path android:fillColor="#050508" android:pathData="M30,76.5h48v4h-48z" />
+</vector>

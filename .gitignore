@@ -1,0 +1,9 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+# Cores are fetched by scripts/fetch-cores.sh
+app/src/main/jniLibs/
