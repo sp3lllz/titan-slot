@@ -8,3 +8,7 @@ local.properties
 # Cores are fetched by scripts/fetch-cores.sh
 app/src/main/jniLibs/
 core_*/src/main/jniLibs/
+# Release signing stays out of git
+keystore.properties
+*.jks
+*.keystore

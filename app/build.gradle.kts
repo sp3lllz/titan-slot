@@ -1,10 +1,20 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Release signing, kept out of the repository. Point at a properties file holding
+//   storeFile, storePassword, keyAlias, keyPassword
+// with -Ptitanslot.signing=/path/to/signing.properties, or put one at ./keystore.properties.
+// Without either, release builds come out unsigned.
+val releaseSigning: Properties? = ((findProperty("titanslot.signing") as String?)?.let(::file)
+    ?: rootProject.file("keystore.properties"))
+    .takeIf { it.isFile }
+    ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 
 android {
     namespace = "dev.titanslot"
@@ -35,9 +45,23 @@ android {
 
     dynamicFeatures += setOf(":core_gambatte", ":core_mgba")
 
+    signingConfigs {
+        if (releaseSigning != null) {
+            create("release") {
+                storeFile = file(releaseSigning.getProperty("storeFile"))
+                storePassword = releaseSigning.getProperty("storePassword")
+                keyAlias = releaseSigning.getProperty("keyAlias")
+                keyPassword = releaseSigning.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // LibretroDroid calls back into Kotlin from JNI and its lifecycle observers are
+            // found by reflection, so shrinking would break it. The cores are most of the size.
             isMinifyEnabled = false
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 
