@@ -29,6 +29,29 @@ The cores are the official [libretro](https://www.libretro.com) builds, run thro
 [LibretroDroid](https://github.com/Swordfish90/LibretroDroid). They aren't in the base APK: the
 setup wizard installs them on first launch.
 
+## Install
+
+1. On the Titan 2 Elite, download **`TitanSlot-<version>.apk`** from the
+   [latest release](https://github.com/sp3lllz/titan-slot/releases/latest).
+2. Open it, and let your browser or file manager install apps when Android asks. Or, from a
+   computer with USB debugging on:
+   ```bash
+   adb install TitanSlot-0.2.0.apk
+   ```
+3. Open Titan Slot. Setup downloads the two emulator cores (a few megabytes), so the first
+   launch needs an internet connection.
+
+Release APKs are the `direct` flavour and are signed with the project's release key, whose
+SHA-256 certificate fingerprint is:
+
+```
+C3:96:CA:17:A1:C0:0A:37:F7:DE:39:39:02:6B:67:0C:96:C9:E7:94:39:79:BB:DE:12:85:5A:70:6B:FE:CC:04
+```
+
+Android only updates an app with an APK signed by the same key, so a build you made yourself
+(debug builds use your own debug key) can't be installed over a release, or the other way
+round, without uninstalling first. Each release lists its APK's SHA-256 checksum.
+
 ## First launch
 
 A short setup walks through everything, and any step can be run again from Settings:
@@ -76,6 +99,27 @@ Console's internal app sharing or internal testing track, or use bundletool's
 `fetch-cores.sh` warns when a core isn't aligned for 16 KB memory pages, which Google Play
 requires of apps targeting Android 15 and later; such a core needs rebuilding with
 `-Wl,-z,max-page-size=16384` before the bundle will be accepted.
+
+### Release builds
+
+Release builds are signed when Gradle is given a properties file holding the key, kept outside
+the repository:
+
+```properties
+storeFile=/path/to/release.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+```bash
+./gradlew assembleDirectRelease -Ptitanslot.signing=/path/to/signing.properties
+# -> app/build/outputs/apk/direct/release/app-direct-release.apk
+```
+
+A `keystore.properties` in the project root works too (it is git-ignored). Without either,
+release builds come out unsigned. Minification stays off: LibretroDroid calls into Kotlin from
+native code and finds its lifecycle observers by reflection.
 
 ## Your games
 
